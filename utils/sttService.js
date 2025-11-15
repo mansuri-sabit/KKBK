@@ -1,9 +1,8 @@
 /**
  * Speech-to-Text Service
- * Transcribes PCM audio to text using OpenAI Whisper API
+ * Transcribes PCM audio to text using Deepgram API
  */
 
-import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import { writeFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
@@ -14,27 +13,23 @@ dotenv.config();
 
 class STTService {
   constructor() {
-    this.openaiApiKey = process.env.OPENAI_API_KEY;
-    this.client = this.openaiApiKey ? new OpenAI({ apiKey: this.openaiApiKey }) : null;
-    
-    // Deepgram fallback
+    // Use Deepgram directly
     this.deepgramApiKey = process.env.DEEPGRAM_API_KEY;
   }
 
   /**
-   * Transcribe PCM audio buffer to text using OpenAI Whisper
-   * Main method - uses OpenAI SDK
-   * Includes retry logic with exponential backoff for connection/rate limit errors
+   * Transcribe PCM audio buffer to text using Deepgram
+   * Main method - uses Deepgram API directly
    * 
    * @param {Buffer} pcmBuffer - PCM audio buffer (16-bit, 16kHz, mono)
    * @param {number} sampleRate - Sample rate (default: 16000)
    * @param {string} language - Language code (default: 'en')
-   * @param {number} maxRetries - Maximum number of retry attempts (default: 3)
+   * @param {number} maxRetries - Maximum number of retry attempts (default: 3, unused for now)
    * @returns {Promise<string|null>} - Transcribed text or null on failure
    */
   async transcribePCM(pcmBuffer, sampleRate = 16000, language = 'en', maxRetries = 3) {
-    if (!this.client) {
-      console.error('❌ OPENAI_API_KEY not configured for STT');
+    if (!this.deepgramApiKey) {
+      console.error('❌ DEEPGRAM_API_KEY not configured for STT');
       return null;
     }
 
@@ -43,182 +38,14 @@ class STTService {
       return null;
     }
 
-    let tempFile = null;
-    let lastError = null;
-
-    try {
-      // Create a temporary WAV file from PCM
-      tempFile = await this.pcmToWavFile(pcmBuffer, sampleRate);
-      
-      // Read file as File object for OpenAI SDK
-      const { readFile } = await import('fs/promises');
-      const fileBuffer = await readFile(tempFile);
-      
-      // Create File object for OpenAI SDK
-      const file = new File([fileBuffer], 'audio.wav', { type: 'audio/wav' });
-      
-      // Retry logic for API calls
-      for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        try {
-          // Call OpenAI Whisper API using OpenAI SDK
-          const transcription = await this.client.audio.transcriptions.create({
-            file: file,
-            model: 'whisper-1',
-            response_format: 'text',
-            language: language || 'en',
-            timeout: 30000 // 30 second timeout
-          });
-
-          const transcribedText = typeof transcription === 'string' 
-            ? transcription.trim() 
-            : String(transcription).trim();
-          
-          if (attempt > 0) {
-            console.log(`✅ Whisper STT succeeded on retry attempt ${attempt + 1}`);
-          }
-          
-          return transcribedText || null;
-        } catch (error) {
-          lastError = error;
-          const errorStatus = error.status || error.response?.status;
-          let errorMessage = error.message || String(error);
-          
-          // Parse error data if available
-          let errorData = error.response?.data || error.error;
-          if (Buffer.isBuffer(errorData)) {
-            try {
-              errorData = JSON.parse(errorData.toString());
-              errorMessage = errorData?.error?.message || errorMessage;
-            } catch {
-              // Ignore parse errors
-            }
-          }
-          
-          // Check if it's a quota error - try Deepgram fallback immediately
-          const isQuotaError = errorStatus === 429 || 
-                            errorMessage.toLowerCase().includes('quota') ||
-                            errorMessage.toLowerCase().includes('billing') ||
-                            errorData?.error?.type === 'insufficient_quota';
-          
-          if (isQuotaError && this.deepgramApiKey && attempt === 0) {
-            // Don't retry quota errors, go straight to fallback
-            console.warn(`⚠️  OpenAI STT quota exceeded, falling back to Deepgram immediately...`);
-            break; // Exit retry loop, will use fallback
-          }
-          
-          // Check if it's a connection error - try Deepgram fallback immediately
-          const isConnectionError = errorMessage.toLowerCase().includes('connection') ||
-                                   errorMessage.toLowerCase().includes('econnreset') ||
-                                   errorMessage.toLowerCase().includes('enotfound') ||
-                                   errorMessage.toLowerCase().includes('etimedout') ||
-                                   errorMessage.toLowerCase().includes('network') ||
-                                   errorMessage.toLowerCase().includes('socket');
-          
-          if (isConnectionError && this.deepgramApiKey && attempt === 0) {
-            // Don't retry connection errors, go straight to fallback
-            console.warn(`⚠️  OpenAI STT connection error detected, falling back to Deepgram immediately...`);
-            break; // Exit retry loop, will use fallback
-          }
-          
-          // Check if it's a retryable error
-          const isRetryable = 
-            errorStatus === 429 || // Rate limit
-            errorStatus >= 500 || // Server errors
-            errorMessage.toLowerCase().includes('connection') || // Connection errors
-            errorMessage.toLowerCase().includes('timeout') || // Timeout errors
-            errorMessage.toLowerCase().includes('econnreset') ||
-            errorMessage.toLowerCase().includes('enotfound') ||
-            errorMessage.toLowerCase().includes('etimedout');
-          
-          if (isRetryable && attempt < maxRetries) {
-            // Calculate wait time with exponential backoff
-            const waitTime = errorStatus === 429 
-              ? (error.response?.headers?.['retry-after'] ? parseInt(error.response.headers['retry-after']) * 1000 : Math.min(1000 * Math.pow(2, attempt), 30000))
-              : Math.min(1000 * Math.pow(2, attempt), 10000);
-            
-            console.warn(`⚠️  Whisper STT error (${errorStatus || 'connection'}) - Attempt ${attempt + 1}/${maxRetries + 1}, retrying in ${waitTime}ms`);
-            console.warn(`   Error: ${errorMessage.substring(0, 200)}`);
-            
-            await new Promise(resolve => setTimeout(resolve, waitTime));
-            continue; // Retry
-          } else {
-            // Non-retryable error or max retries exceeded
-            if (attempt >= maxRetries) {
-              console.error(`❌ Whisper STT failed after ${maxRetries + 1} attempts`);
-            } else {
-              console.error(`❌ Whisper STT non-retryable error: ${errorMessage}`);
-            }
-            break; // Don't retry
-          }
-        }
-      }
-      
-      // All retries failed - try Deepgram fallback
-      if (lastError && this.deepgramApiKey) {
-        const errorStatus = lastError.status || lastError.response?.status;
-        let errorMessage = lastError.message || String(lastError);
-        let errorData = lastError.response?.data;
-        
-        // Parse error data if Buffer
-        if (Buffer.isBuffer(errorData)) {
-          try {
-            errorData = JSON.parse(errorData.toString());
-            errorMessage = errorData?.error?.message || errorMessage;
-          } catch {
-            // Ignore parse errors
-          }
-        }
-        
-        const isQuotaError = errorStatus === 429 || 
-                            errorMessage.toLowerCase().includes('quota') ||
-                            errorMessage.toLowerCase().includes('billing') ||
-                            errorData?.error?.type === 'insufficient_quota';
-        
-        const isConnectionError = errorMessage.toLowerCase().includes('connection') ||
-                                 errorMessage.toLowerCase().includes('econnreset') ||
-                                 errorMessage.toLowerCase().includes('enotfound') ||
-                                 errorMessage.toLowerCase().includes('etimedout') ||
-                                 errorMessage.toLowerCase().includes('network') ||
-                                 errorMessage.toLowerCase().includes('socket');
-        
-        // Try Deepgram fallback for quota or connection errors
-        if (isQuotaError || isConnectionError) {
-          console.warn(`⚠️  OpenAI STT failed (${isQuotaError ? 'quota' : 'connection'}), falling back to Deepgram...`);
-          return await this.transcribeWithDeepgram(pcmBuffer, sampleRate, language);
-        }
-      }
-      
-      return null;
-    } catch (error) {
-      console.error('❌ Whisper STT error:', error.message || error);
-      
-      // Try Deepgram fallback on any error if available
-      if (this.deepgramApiKey) {
-        console.warn(`⚠️  OpenAI STT failed, trying Deepgram fallback...`);
-        try {
-          return await this.transcribeWithDeepgram(pcmBuffer, sampleRate, language);
-        } catch (fallbackError) {
-          console.error('❌ Deepgram STT fallback also failed:', fallbackError.message);
-        }
-      }
-      
-      return null;
-    } finally {
-      // Clean up temp file
-      if (tempFile) {
-        try {
-          unlinkSync(tempFile);
-        } catch (cleanupError) {
-          // Ignore cleanup errors
-        }
-      }
-    }
+    // Use Deepgram directly
+    return await this.transcribeWithDeepgram(pcmBuffer, sampleRate, language);
   }
 
   /**
    * Transcribe PCM audio buffer to text (alias for transcribePCM)
    * 
-   * @param {Buffer} pcmBuffer - PCM audio buffer (16-bit, 8kHz, mono)
+   * @param {Buffer} pcmBuffer - PCM audio buffer (16-bit, 16kHz, mono)
    * @param {Object} options - Optional configuration
    * @param {string} options.language - Language code (default: 'en')
    * @returns {Promise<string|null>} - Transcribed text or null on failure
@@ -277,7 +104,7 @@ class STTService {
   }
 
   /**
-   * Transcribe audio using Deepgram API (fallback when OpenAI fails)
+   * Transcribe audio using Deepgram API
    * 
    * @param {Buffer} pcmBuffer - PCM audio buffer (16-bit, 16kHz, mono)
    * @param {number} sampleRate - Sample rate (default: 16000)

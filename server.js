@@ -1,6 +1,6 @@
 import express from "express";
 import { WebSocketServer } from "ws";
-import OpenAI from "openai";
+// OpenAI removed - using Deepgram for STT/TTS and Gemini for LLM
 import { ExotelVoicebotCaller } from './index.js';
 import { sttService } from './utils/sttService.js';
 import { ttsService } from './utils/ttsService.js';
@@ -27,7 +27,7 @@ app.get('/', (req, res) => {
   
   res.json({
     status: 'ok',
-    service: 'OpenAI Voicebot (STT + LLM + TTS)',
+    service: 'Voicebot (Deepgram STT/TTS + Gemini LLM)',
     message: 'WebSocket server running on /was. Use POST /call to initiate calls.',
     endpoint: `${wsUrl}/was?sample-rate=16000`,
     baseUrl: baseUrl
@@ -269,17 +269,16 @@ async function streamTTSAudio(ws, session, text, sendMark = true) {
   }
 
   try {
-    // Get voice from custom_parameters or default to female voice (nova for OpenAI, aura-luna-en for Deepgram)
-    // Female voices: shimmer, nova (OpenAI) | aura-asteria-en, aura-luna-en, aura-stella-en (Deepgram)
+    // Get voice from custom_parameters or default to female voice (aura-luna-en for Deepgram)
+    // Female voices: aura-asteria-en, aura-luna-en, aura-stella-en (Deepgram)
     const voice = session.customParameters?.voice_id || 'nova';
     
     console.log(`🎙️ [${session.callId}] TTS: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}" (voice: ${voice})`);
     
-    // Synthesize with TTS (OpenAI with Deepgram fallback)
-    // Try OpenAI first, falls back to Deepgram if quota exceeded
+    // Synthesize with TTS using Deepgram
     const { buffer: audioBuffer, sourceSampleRate } = await ttsService.synthesize(text, voice, session.sampleRate);
     
-    // Resample if needed (OpenAI returns 24kHz, Deepgram already at target rate)
+    // Resample if needed (Deepgram returns at target rate)
     let pcmBuffer = audioBuffer;
     if (sourceSampleRate !== session.sampleRate) {
       console.log(`   🔄 Resampling from ${sourceSampleRate}Hz to ${session.sampleRate}Hz`);
@@ -398,7 +397,7 @@ async function processUserAudio(session) {
       return;
     }
     
-    // STT: Transcribe audio using OpenAI Whisper (with Deepgram fallback)
+    // STT: Transcribe audio using Deepgram
     console.log(`🎤 [${session.callId}] Starting STT transcription...`);
     const transcribedText = await sttService.transcribePCM(combinedAudio, session.sampleRate);
     

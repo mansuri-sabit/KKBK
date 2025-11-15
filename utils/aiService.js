@@ -506,7 +506,7 @@ class AIService {
         const apiLatency = Date.now() - startTime;
         const replyText = fullReply.trim();
 
-        if (replyText) {
+        if (replyText && replyText.length > 0) {
           console.log(`✅ [${session?.callId || 'AI'}] Gemini streaming complete: ${replyText.length} chars, ${tokenCount} tokens (latency: ${apiLatency}ms)`);
           
           // Post-process reply
@@ -521,13 +521,28 @@ class AIService {
           return processedReply;
         }
 
+        // Log warning if reply is empty
+        if (tokenCount === 0) {
+          console.warn(`⚠️  [${session?.callId || 'AI'}] Gemini streaming completed but no tokens were received`);
+        } else {
+          console.warn(`⚠️  [${session?.callId || 'AI'}] Gemini streaming completed but reply is empty (${tokenCount} tokens received)`);
+        }
+
         return null;
       } finally {
         reader.releaseLock();
       }
     } catch (error) {
       let errorMessage = error.message || 'Unknown error';
-      console.error('❌ Gemini streaming API error:', errorMessage);
+      
+      // For fetch API, errors are handled differently
+      // Network errors will have error.message
+      // HTTP errors should be caught in the response.ok check above
+      
+      console.error(`❌ [${session?.callId || 'AI'}] Gemini streaming API error: ${errorMessage}`);
+      if (error.stack) {
+        console.error(`   Stack trace: ${error.stack.substring(0, 300)}`);
+      }
       
       // Signal completion even on error (if callback was provided)
       if (onToken) {

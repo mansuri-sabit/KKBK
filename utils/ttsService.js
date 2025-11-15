@@ -1,6 +1,6 @@
 /**
  * TTS Service Utility
- * Supports multiple TTS providers: OpenAI, Google, or simple fallback
+ * Uses Deepgram TTS (Aura) for text-to-speech synthesis
  */
 
 import axios from 'axios';
@@ -11,8 +11,8 @@ dotenv.config();
 
 class TTSService {
   constructor() {
-    this.provider = process.env.TTS_PROVIDER || 'openai'; // 'openai', 'google', 'elevenlabs', 'deepgram'
-    this.openaiApiKey = process.env.OPENAI_API_KEY;
+    this.provider = process.env.TTS_PROVIDER || 'deepgram'; // 'deepgram', 'google', 'elevenlabs'
+    // OpenAI removed - using Deepgram directly
     this.googleApiKey = process.env.GOOGLE_TTS_API_KEY;
     this.elevenlabsApiKey = process.env.ELEVENLABS_API_KEY;
     this.deepgramApiKey = process.env.DEEPGRAM_API_KEY;
@@ -36,7 +36,7 @@ class TTSService {
   }
 
   /**
-   * Synthesize text to speech with automatic fallback
+   * Synthesize text to speech using Deepgram
    * Returns audio buffer (PCM format)
    * 
    * @param {string} text - Text to synthesize
@@ -45,59 +45,21 @@ class TTSService {
    * @returns {Promise<{buffer: Buffer, sourceSampleRate: number}>} - Audio buffer and source sample rate
    */
   async synthesize(text, voice = null, sampleRate = 16000) {
-    console.log(`🎙️ TTS synthesis using ${this.provider}:`, { textLength: text.length, voice, sampleRate });
+    console.log(`🎙️ TTS synthesis using Deepgram:`, { textLength: text.length, voice, sampleRate });
 
-    // Try OpenAI first
-    if (this.openaiApiKey) {
-      try {
-        const buffer = await this.synthesizeOpenAI(text, voice, sampleRate);
-        // OpenAI returns 24kHz PCM
-        return { buffer, sourceSampleRate: 24000 };
-      } catch (error) {
-        const errorStatus = error.response?.status || error.status;
-        const errorMessage = error.message || String(error);
-        let errorData = error.response?.data;
-        
-        // Parse error data if Buffer
-        if (Buffer.isBuffer(errorData)) {
-          try {
-            errorData = JSON.parse(errorData.toString());
-          } catch {
-            // Ignore parse errors
-          }
-        }
-        
-        // Check if it's a quota error - try Deepgram fallback
-        const isQuotaError = errorStatus === 429 || 
-                            errorMessage.toLowerCase().includes('quota') ||
-                            errorMessage.toLowerCase().includes('billing') ||
-                            errorData?.error?.type === 'insufficient_quota';
-        
-        if (isQuotaError && this.deepgramApiKey) {
-          console.warn(`⚠️  OpenAI TTS quota exceeded, falling back to Deepgram...`);
-          const buffer = await this.synthesizeDeepgram(text, voice, sampleRate);
-          // Deepgram returns at target sample rate (already converted)
-          return { buffer, sourceSampleRate: sampleRate };
-        }
-        
-        // Re-throw if not quota error or no fallback available
-        throw error;
-      }
-    }
-
-    // If no OpenAI key, try Deepgram
+    // Use Deepgram directly
     if (this.deepgramApiKey) {
       const buffer = await this.synthesizeDeepgram(text, voice, sampleRate);
+      // Deepgram returns at target sample rate (already converted)
       return { buffer, sourceSampleRate: sampleRate };
     }
 
-    throw new Error('No TTS provider configured. Please set OPENAI_API_KEY or DEEPGRAM_API_KEY.');
+    throw new Error('No TTS provider configured. Please set DEEPGRAM_API_KEY.');
   }
 
   /**
-   * OpenAI TTS (tts-1-hd model for best quality)
-   * Returns raw 16-bit PCM format (16kHz, mono)
-   * Includes retry logic with exponential backoff for rate limit errors
+   * OpenAI TTS - DEPRECATED (no longer used)
+   * Kept for reference only - OpenAI has been removed from the service
    */
   async synthesizeOpenAI(text, voice = 'shimmer', sampleRate = 16000, maxRetries = 3) {
     if (!this.openaiApiKey) {
