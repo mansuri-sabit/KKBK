@@ -367,10 +367,13 @@ class AIService {
       fullPrompt += `User: ${userText.trim()}\nAssistant:`;
 
       console.log(`📡 [${session?.callId || 'AI'}] Using Gemini 2.0 Flash streaming API...`);
+      console.log(`   Prompt length: ${fullPrompt.length} chars`);
+      console.log(`   API URL: ${this.geminiStreamApiUrl}`);
 
       const startTime = Date.now();
       let fullReply = '';
       let tokenCount = 0;
+      let chunkCount = 0;
 
       // Use native fetch for Server-Sent Events (SSE) streaming
       const response = await fetch(
@@ -405,8 +408,11 @@ class AIService {
         } catch {
           // Keep original error message
         }
+        console.error(`❌ [${session?.callId || 'AI'}] Gemini API error: ${errorMessage}`);
         throw new Error(errorMessage);
       }
+
+      console.log(`   ✅ Response status: ${response.status}`);
 
       // Read the streaming response
       const reader = response.body.getReader();
@@ -437,6 +443,7 @@ class AIService {
                 continue;
               }
 
+              chunkCount++;
               try {
                 const data = JSON.parse(dataStr);
                 
@@ -445,6 +452,7 @@ class AIService {
                 if (candidate) {
                   // Check for finish reason - stream is complete
                   if (candidate.finishReason) {
+                    console.log(`   ✅ [${session?.callId || 'AI'}] Finish reason: ${candidate.finishReason}`);
                     continue; // Don't break, continue processing remaining chunks
                   }
 
@@ -463,7 +471,13 @@ class AIService {
                         }
                       }
                     }
+                  } else if (chunkCount === 1) {
+                    // Log first chunk structure for debugging
+                    console.log(`   🔍 [${session?.callId || 'AI'}] First chunk structure:`, JSON.stringify(data).substring(0, 200));
                   }
+                } else if (chunkCount === 1) {
+                  // Log first chunk if no candidate found
+                  console.log(`   ⚠️  [${session?.callId || 'AI'}] First chunk has no candidate:`, JSON.stringify(data).substring(0, 200));
                 }
               } catch (parseError) {
                 // Skip malformed JSON lines (can happen in SSE streams)
@@ -524,6 +538,7 @@ class AIService {
         // Log warning if reply is empty
         if (tokenCount === 0) {
           console.warn(`⚠️  [${session?.callId || 'AI'}] Gemini streaming completed but no tokens were received`);
+          console.warn(`   Chunks processed: ${chunkCount}, Tokens: ${tokenCount}, Reply length: ${fullReply.length}`);
         } else {
           console.warn(`⚠️  [${session?.callId || 'AI'}] Gemini streaming completed but reply is empty (${tokenCount} tokens received)`);
         }

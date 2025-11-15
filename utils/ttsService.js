@@ -11,11 +11,10 @@ dotenv.config();
 
 class TTSService {
   constructor() {
-    this.provider = process.env.TTS_PROVIDER || 'deepgram'; // 'deepgram', 'google', 'elevenlabs'
-    // OpenAI removed - using Deepgram directly
-    this.googleApiKey = process.env.GOOGLE_TTS_API_KEY;
-    this.elevenlabsApiKey = process.env.ELEVENLABS_API_KEY;
+    // Always uses Deepgram - TTS_PROVIDER is not needed (ignored)
     this.deepgramApiKey = process.env.DEEPGRAM_API_KEY;
+    this.googleApiKey = process.env.GOOGLE_TTS_API_KEY; // Not used, kept for compatibility
+    this.elevenlabsApiKey = process.env.ELEVENLABS_API_KEY; // Not used, kept for compatibility
     this.elevenlabsVoiceId = process.env.ELEVEN_VOICE_ID || 'Rachel';
     this.elevenlabsClient = this.elevenlabsApiKey ? new ElevenLabsClient({ apiKey: this.elevenlabsApiKey }) : null;
   }

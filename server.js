@@ -567,7 +567,9 @@ wss.on("connection", (ws, req) => {
     pendingClear: false,
     processingAudio: false,
     greetingSent: false, // Track if greeting has been sent
-    greetingInProgress: false // Prevent concurrent greeting attempts
+    greetingInProgress: false, // Prevent concurrent greeting attempts
+    outboundTrackLogged: false, // Flag to log outbound track once
+    inboundTrackLogged: false // Flag to log inbound track once
   };
   
   sessions.set(callSid, session);
@@ -783,12 +785,24 @@ function handleMediaEvent(ws, session, message) {
   
   // Skip outbound track (echo of our audio)
   if (message.media.track === 'outbound') {
+    // Log first few outbound tracks for debugging
+    if (!session.outboundTrackLogged) {
+      console.log(`   🔄 [${session.callId}] Outbound track detected (echo of our audio) - skipping`);
+      session.outboundTrackLogged = true;
+    }
     return;
   }
   
   // Decode base64 audio payload (inbound - customer audio)
   try {
     const audioChunk = Buffer.from(message.media.payload, 'base64');
+    
+    // Log first few inbound tracks for debugging
+    if (!session.inboundTrackLogged) {
+      console.log(`   🎤 [${session.callId}] Inbound track detected (customer audio) - ${audioChunk.length} bytes`);
+      session.inboundTrackLogged = true;
+    }
+    
     session.audioBuffer.push(audioChunk);
     
     // Process audio when buffer reaches threshold (~2 seconds of audio)
