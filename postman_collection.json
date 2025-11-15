@@ -1,0 +1,100 @@
+{
+	"info": {
+		"name": "Exotel OpenAI Voicebot API",
+		"description": "API collection for Exotel Voicebot with OpenAI (STT + LLM + TTS)",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "exotel-voicebot"
+	},
+	"item": [
+		{
+			"name": "Health Check",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						""
+					]
+				},
+				"description": "Check if server is running and get WebSocket endpoint URL"
+			},
+			"response": []
+		},
+		{
+			"name": "Make Outbound Call",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"to\": \"+919324606985\",\n  \"from\": null\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/call",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"call"
+					]
+				},
+				"description": "Initiate an outbound call using Exotel Voicebot"
+			},
+			"response": []
+		},
+		{
+			"name": "Make Call with Custom Parameters",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"to\": \"+919324606985\",\n  \"from\": null,\n  \"custom_parameters\": {\n    \"persona_name\": \"Parvati\",\n    \"persona_age\": \"25\",\n    \"tone\": \"friendly\",\n    \"gender\": \"female\",\n    \"city\": \"Mumbai\",\n    \"language\": \"Hindi\",\n    \"customer_name\": \"Rahul\",\n    \"voice_id\": \"shimmer\",\n    \"greeting\": \"Hello! How can I help you today?\",\n    \"documents\": \"Our company offers WhatsApp marketing services with verified numbers and bulk messaging capabilities.\"\n  }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/call",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"call"
+					]
+				},
+				"description": "Make a call with custom parameters for persona, voice, and knowledgebase"
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "https://kkbk-xjhf.onrender.com",
+			"type": "string"
+		}
+	]
+}
+

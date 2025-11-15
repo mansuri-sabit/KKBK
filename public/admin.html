@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoiceBot Admin Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Toast notification styles */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 16px 24px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+            animation: slideIn 0.3s ease-out;
+        }
+        .toast.success {
+            background-color: #10b981;
+            color: white;
+        }
+        .toast.error {
+            background-color: #ef4444;
+            color: white;
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.active {
+            display: flex;
+        }
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 800px;
+            max-height: 80vh;
+            width: 90%;
+            overflow-y: auto;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+        /* Loading spinner */
+        .spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen py-8">
+    <div class="max-w-4xl mx-auto px-4">
+        <!-- Header -->
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-900 mb-2">VoiceBot Admin Panel</h1>
+            <p class="text-gray-600">Manage persona and knowledgebase documents</p>
+        </div>
+
+        <!-- Persona Editor Card -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Persona Editor</h2>
+            <p class="text-sm text-gray-600 mb-4">Edit the AI persona/system prompt that guides the voicebot's behavior.</p>
+            
+            <textarea 
+                id="personaInput" 
+                class="w-full h-64 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                placeholder="Enter persona text here..."
+            ></textarea>
+            
+            <div class="mt-4 flex items-center gap-4">
+                <button 
+                    id="savePersonaBtn" 
+                    class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    onclick="savePersona()"
+                >
+                    <span id="savePersonaText">Save Persona</span>
+                    <span id="savePersonaSpinner" class="spinner hidden ml-2"></span>
+                </button>
+                <span id="personaStatus" class="text-sm text-gray-500"></span>
+            </div>
+        </div>
+
+        <!-- Document Upload Card -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Upload Document</h2>
+            <p class="text-sm text-gray-600 mb-4">Upload knowledgebase documents (txt, md, docx, pdf). Files will be parsed and chunked for RAG.</p>
+            
+            <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                <input 
+                    type="file" 
+                    id="docFile" 
+                    accept=".txt,.md,.docx,.pdf"
+                    class="hidden"
+                    onchange="handleFileSelect(event)"
+                />
+                <label for="docFile" class="cursor-pointer">
+                    <div class="mb-2">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                            <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-4h4m-4-4v4m0 4v4m0-4h4m-4-4h4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </div>
+                    <p class="text-sm text-gray-600 mb-1">
+                        <span class="text-blue-600 font-medium">Click to upload</span> or drag and drop
+                    </p>
+                    <p class="text-xs text-gray-500">TXT, MD, DOCX, PDF (Max 10MB)</p>
+                </label>
+                <div id="selectedFileName" class="mt-2 text-sm text-gray-700 font-medium hidden"></div>
+            </div>
+            
+            <button 
+                id="uploadDocBtn" 
+                class="mt-4 w-full px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                onclick="uploadDocument()"
+                disabled
+            >
+                <span id="uploadDocText">Upload Document</span>
+                <span id="uploadDocSpinner" class="spinner hidden ml-2"></span>
+            </button>
+        </div>
+
+        <!-- Documents List Card -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-semibold text-gray-800">Stored Documents</h2>
+                <button 
+                    onclick="loadDocuments()" 
+                    class="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                    Refresh
+                </button>
+            </div>
+            
+            <div id="docList" class="space-y-3">
+                <div class="text-center py-8 text-gray-500">
+                    <div class="spinner mx-auto mb-2"></div>
+                    <p>Loading documents...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Monitoring Card -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-semibold text-gray-800">Monitoring & Transcripts</h2>
+                <button 
+                    onclick="loadMonitoringStatus()" 
+                    class="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                    Refresh
+                </button>
+            </div>
+            
+            <!-- Status Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div id="transcriptStatus" class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-blue-600 font-medium">Transcripts</p>
+                            <p id="transcriptStatusText" class="text-2xl font-bold text-blue-800">-</p>
+                        </div>
+                        <div id="transcriptStatusIcon" class="text-3xl">📊</div>
+                    </div>
+                </div>
+                <div id="logStatus" class="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-green-600 font-medium">Logs</p>
+                            <p id="logStatusText" class="text-2xl font-bold text-green-800">-</p>
+                        </div>
+                        <div id="logStatusIcon" class="text-3xl">📝</div>
+                    </div>
+                </div>
+                <div id="overallStatus" class="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-purple-600 font-medium">Overall</p>
+                            <p id="overallStatusText" class="text-lg font-bold text-purple-800">-</p>
+                        </div>
+                        <div id="overallStatusIcon" class="text-3xl">✅</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Transcripts -->
+            <div class="mb-4">
+                <h3 class="text-lg font-semibold text-gray-800 mb-3">Recent Transcripts</h3>
+                <div id="recentTranscripts" class="space-y-2">
+                    <div class="text-center py-4 text-gray-500">
+                        <div class="spinner mx-auto mb-2"></div>
+                        <p>Loading transcripts...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Logs -->
+            <div>
+                <h3 class="text-lg font-semibold text-gray-800 mb-3">Recent Logs</h3>
+                <div id="recentLogs" class="space-y-2 max-h-64 overflow-y-auto">
+                    <div class="text-center py-4 text-gray-500">
+                        <div class="spinner mx-auto mb-2"></div>
+                        <p>Loading logs...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Document View Modal -->
+    <div id="docModal" class="modal">
+        <div class="modal-content">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-xl font-semibold text-gray-800" id="modalTitle">Document Content</h3>
+                <button 
+                    onclick="closeModal()" 
+                    class="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                >
+                    ×
+                </button>
+            </div>
+            <div class="mb-4">
+                <p class="text-sm text-gray-600" id="modalMeta"></p>
+            </div>
+            <div class="border border-gray-200 rounded-lg p-4 bg-gray-50 max-h-96 overflow-y-auto">
+                <pre id="modalContent" class="whitespace-pre-wrap text-sm text-gray-800 font-mono"></pre>
+            </div>
+            <div class="mt-4 flex justify-end">
+                <button 
+                    onclick="closeModal()" 
+                    class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Toast notification function
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.animation = 'slideIn 0.3s ease-out reverse';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Load persona on page load
+        async function loadPersona() {
+            try {
+                const response = await fetch('/persona');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.success && data.persona) {
+                    document.getElementById('personaInput').value = data.persona.content;
+                    const date = new Date(data.persona.updatedAt).toLocaleString();
+                    document.getElementById('personaStatus').textContent = `Last updated: ${date}`;
+                } else {
+                    document.getElementById('personaStatus').textContent = 'No persona found. Create one above.';
+                }
+            } catch (error) {
+                console.error('Error loading persona:', error);
+                document.getElementById('personaStatus').textContent = 'Error loading persona. Check console.';
+                showToast('Failed to load persona: ' + error.message, 'error');
+            }
+        }
+
+        // Save persona
+        async function savePersona() {
+            const textarea = document.getElementById('personaInput');
+            const content = textarea.value.trim();
+            
+            if (!content) {
+                showToast('Persona content cannot be empty', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('savePersonaBtn');
+            const btnText = document.getElementById('savePersonaText');
+            const spinner = document.getElementById('savePersonaSpinner');
+            
+            btn.disabled = true;
+            btnText.textContent = 'Saving...';
+            spinner.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/persona/upload', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ content })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showToast('Persona saved successfully!', 'success');
+                    document.getElementById('personaStatus').textContent = `Last updated: ${new Date().toLocaleString()}`;
+                } else {
+                    showToast(data.error || 'Failed to save persona', 'error');
+                }
+            } catch (error) {
+                console.error('Error saving persona:', error);
+                showToast('Failed to save persona', 'error');
+            } finally {
+                btn.disabled = false;
+                btnText.textContent = 'Save Persona';
+                spinner.classList.add('hidden');
+            }
+        }
+
+        // Handle file selection
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            const uploadBtn = document.getElementById('uploadDocBtn');
+            const fileNameDiv = document.getElementById('selectedFileName');
+            
+            if (file) {
+                fileNameDiv.textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`;
+                fileNameDiv.classList.remove('hidden');
+                uploadBtn.disabled = false;
+            } else {
+                fileNameDiv.classList.add('hidden');
+                uploadBtn.disabled = true;
+            }
+        }
+
+        // Upload document
+        async function uploadDocument() {
+            const fileInput = document.getElementById('docFile');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                showToast('Please select a file first', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('uploadDocBtn');
+            const btnText = document.getElementById('uploadDocText');
+            const spinner = document.getElementById('uploadDocSpinner');
+            
+            btn.disabled = true;
+            btnText.textContent = 'Uploading...';
+            spinner.classList.remove('hidden');
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch('/documents/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showToast(`Document "${data.document.filename}" uploaded successfully!`, 'success');
+                    fileInput.value = '';
+                    document.getElementById('selectedFileName').classList.add('hidden');
+                    loadDocuments();
+                } else {
+                    showToast(data.error || 'Failed to upload document', 'error');
+                }
+            } catch (error) {
+                console.error('Error uploading document:', error);
+                showToast('Failed to upload document', 'error');
+            } finally {
+                btn.disabled = false;
+                btnText.textContent = 'Upload Document';
+                spinner.classList.add('hidden');
+            }
+        }
+
+        // Load documents list
+        async function loadDocuments() {
+            const docList = document.getElementById('docList');
+            docList.innerHTML = '<div class="text-center py-4 text-gray-500"><div class="spinner mx-auto mb-2"></div><p>Loading documents...</p></div>';
+
+            try {
+                const response = await fetch('/documents');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+
+                if (data.success) {
+                    if (data.documents.length === 0) {
+                        docList.innerHTML = '<div class="text-center py-8 text-gray-500"><p>No documents uploaded yet.</p></div>';
+                    } else {
+                        docList.innerHTML = data.documents.map(doc => {
+                            const date = new Date(doc.uploadedAt).toLocaleString();
+                            return `
+                                <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex-1">
+                                            <h4 class="font-medium text-gray-900 mb-1">${escapeHtml(doc.filename)}</h4>
+                                            <p class="text-sm text-gray-500">Uploaded: ${date}</p>
+                                            <p class="text-xs text-gray-400 mt-1">Type: ${doc.mimetype}</p>
+                                        </div>
+                                        <div class="flex gap-2 ml-4">
+                                            <button 
+                                                onclick="viewDocument('${doc.id}')" 
+                                                class="px-4 py-2 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
+                                            >
+                                                View Text
+                                            </button>
+                                            <button 
+                                                onclick="deleteDocument('${doc.id}', '${escapeHtml(doc.filename)}')" 
+                                                class="px-4 py-2 text-sm bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
+                                            >
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('');
+                    }
+                } else {
+                    docList.innerHTML = '<div class="text-center py-4 text-red-500"><p>Failed to load documents</p></div>';
+                }
+            } catch (error) {
+                console.error('Error loading documents:', error);
+                docList.innerHTML = '<div class="text-center py-4 text-red-500"><p>Error loading documents</p></div>';
+            }
+        }
+
+        // View document
+        async function viewDocument(id) {
+            const modal = document.getElementById('docModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalMeta = document.getElementById('modalMeta');
+            const modalContent = document.getElementById('modalContent');
+
+            modal.classList.add('active');
+            modalTitle.textContent = 'Loading...';
+            modalContent.textContent = 'Loading document content...';
+
+            try {
+                const response = await fetch(`/documents/${id}`);
+                const data = await response.json();
+
+                if (data.success && data.document) {
+                    const doc = data.document;
+                    modalTitle.textContent = doc.filename;
+                    modalMeta.textContent = `Uploaded: ${new Date(doc.uploadedAt).toLocaleString()} | Chunks: ${doc.chunksCount} | Size: ${doc.content.length} characters`;
+                    modalContent.textContent = doc.content;
+                } else {
+                    modalTitle.textContent = 'Error';
+                    modalContent.textContent = data.error || 'Failed to load document';
+                }
+            } catch (error) {
+                console.error('Error viewing document:', error);
+                modalTitle.textContent = 'Error';
+                modalContent.textContent = 'Failed to load document content';
+            }
+        }
+
+        // Delete document
+        async function deleteDocument(id, filename) {
+            if (!confirm(`Are you sure you want to delete "${filename}"?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/documents/${id}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showToast(`Document "${filename}" deleted successfully`, 'success');
+                    loadDocuments();
+                } else {
+                    showToast(data.error || 'Failed to delete document', 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting document:', error);
+                showToast('Failed to delete document', 'error');
+            }
+        }
+
+        // Close modal
+        function closeModal() {
+            document.getElementById('docModal').classList.remove('active');
+        }
+
+        // Escape HTML to prevent XSS
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Close modal on outside click
+        document.getElementById('docModal').addEventListener('click', (e) => {
+            if (e.target.id === 'docModal') {
+                closeModal();
+            }
+        });
+
+        // Load monitoring status
+        async function loadMonitoringStatus() {
+            try {
+                // Load status
+                const statusResponse = await fetch('/monitoring/status');
+                const statusData = await statusResponse.json();
+                
+                if (statusData.success) {
+                    // Update status cards
+                    const transcriptStatus = statusData.transcripts;
+                    const logStatus = statusData.logs;
+                    const overall = statusData.overall;
+                    
+                    document.getElementById('transcriptStatusText').textContent = 
+                        `${transcriptStatus.totalCount || 0} total`;
+                    document.getElementById('logStatusText').textContent = 
+                        `${logStatus.inBuffer || 0} logs`;
+                    document.getElementById('overallStatusText').textContent = 
+                        overall.status === 'healthy' ? '✅ Healthy' : 
+                        overall.status === 'no_activity' ? '⚠️ No Activity' : '❌ Error';
+                    
+                    // Update status colors
+                    const transcriptCard = document.getElementById('transcriptStatus');
+                    const logCard = document.getElementById('logStatus');
+                    const overallCard = document.getElementById('overallStatus');
+                    
+                    if (transcriptStatus.status === 'active') {
+                        transcriptCard.className = 'bg-green-50 border border-green-200 rounded-lg p-4';
+                    } else {
+                        transcriptCard.className = 'bg-yellow-50 border border-yellow-200 rounded-lg p-4';
+                    }
+                    
+                    if (logStatus.status === 'active') {
+                        logCard.className = 'bg-green-50 border border-green-200 rounded-lg p-4';
+                    } else {
+                        logCard.className = 'bg-yellow-50 border border-yellow-200 rounded-lg p-4';
+                    }
+                    
+                    if (overall.status === 'healthy') {
+                        overallCard.className = 'bg-green-50 border border-green-200 rounded-lg p-4';
+                    } else if (overall.status === 'no_activity') {
+                        overallCard.className = 'bg-yellow-50 border border-yellow-200 rounded-lg p-4';
+                    } else {
+                        overallCard.className = 'bg-red-50 border border-red-200 rounded-lg p-4';
+                    }
+                }
+                
+                // Load recent transcripts
+                const transcriptsResponse = await fetch('/monitoring/transcripts?limit=5');
+                const transcriptsData = await transcriptsResponse.json();
+                
+                const transcriptsDiv = document.getElementById('recentTranscripts');
+                if (transcriptsData.success && transcriptsData.transcripts.length > 0) {
+                    transcriptsDiv.innerHTML = transcriptsData.transcripts.map(t => {
+                        const duration = t.duration ? `${t.duration}s` : 'N/A';
+                        const turns = t.metadata?.totalTurns || 0;
+                        const date = new Date(t.createdAt).toLocaleString();
+                        return `
+                            <div class="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex-1">
+                                        <p class="font-medium text-gray-800">${escapeHtml(t.callId)}</p>
+                                        <p class="text-sm text-gray-600">${date} • ${duration} • ${turns} turns</p>
+                                    </div>
+                                    <span class="px-2 py-1 text-xs rounded ${t.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">
+                                        ${t.status}
+                                    </span>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    transcriptsDiv.innerHTML = '<div class="text-center py-4 text-gray-500"><p>No transcripts yet</p></div>';
+                }
+                
+                // Load recent logs
+                const logsResponse = await fetch('/monitoring/logs?limit=10');
+                const logsData = await logsResponse.json();
+                
+                const logsDiv = document.getElementById('recentLogs');
+                if (logsData.success && logsData.logs.length > 0) {
+                    logsDiv.innerHTML = logsData.logs.map(log => {
+                        const time = new Date(log.timestamp).toLocaleTimeString();
+                        const levelEmoji = {
+                            'info': 'ℹ️',
+                            'warn': '⚠️',
+                            'error': '❌',
+                            'success': '✅'
+                        }[log.level] || '📝';
+                        const levelColor = {
+                            'info': 'text-blue-600',
+                            'warn': 'text-yellow-600',
+                            'error': 'text-red-600',
+                            'success': 'text-green-600'
+                        }[log.level] || 'text-gray-600';
+                        
+                        return `
+                            <div class="border border-gray-200 rounded-lg p-2 hover:bg-gray-50 transition-colors">
+                                <div class="flex items-start justify-between">
+                                    <div class="flex-1">
+                                        <span class="${levelColor} font-medium">${levelEmoji} ${escapeHtml(log.message)}</span>
+                                        <p class="text-xs text-gray-500 mt-1">${time} • ${escapeHtml(log.callId || 'system')}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    logsDiv.innerHTML = '<div class="text-center py-4 text-gray-500"><p>No logs yet</p></div>';
+                }
+                
+            } catch (error) {
+                console.error('Error loading monitoring status:', error);
+                document.getElementById('recentTranscripts').innerHTML = 
+                    '<div class="text-center py-4 text-red-500"><p>Error loading monitoring data</p></div>';
+                document.getElementById('recentLogs').innerHTML = 
+                    '<div class="text-center py-4 text-red-500"><p>Error loading logs</p></div>';
+            }
+        }
+
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            loadPersona();
+            loadDocuments();
+            loadMonitoringStatus();
+            
+            // Auto-refresh monitoring every 30 seconds
+            setInterval(loadMonitoringStatus, 30000);
+        });
+    </script>
+</body>
+</html>
+

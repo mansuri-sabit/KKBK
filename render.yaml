@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: exotel-voicebot-caller
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: EXOTEL_SUBDOMAIN
+        value: api.exotel.com
+
